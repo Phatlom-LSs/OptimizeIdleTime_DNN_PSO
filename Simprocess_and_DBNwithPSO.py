@@ -13,88 +13,88 @@ from sklearn.linear_model import LinearRegression
 from scipy.optimize import minimize
 from currency_converter import CurrencyConverter
 
-df = pd.read_csv('C:/Users/763073/OneDrive - Seagate Technology/Desktop/SDET_UPH.csv')
+df = pd.read_csv('File_Directory')
 
-ALLUM_production_time = {
+MC1_production_time = {
     'EQUIP_ID': df['EQUIP_ID'],
-    'Total_SETS': 1240,
-    'SETS_per_Tray': 20,
-    'Tray_per_batch': 10,
-    'production_rate_trays_per_hour': df['UPH'],
-    'batch_interval_sec': 10,
+    'Total_SETS': 2000,
+    'SETS_per_Tray': 100,
+    'Tray_per_batch': 100,
+    'production_rate_per_hour': df['UPH'],
+    'batch_interval_sec': 100,
 }
 
-ET_production_time = {
-    'TSTR_PART_NUM': df['TSTR_PART_NUM'],
-    'bacth_processing_rate_per_machine': 1/3 * ALLUM_production_time['production_rate_trays_per_hour'],
+MC2_production_time = {
+    'TSTR_PART_NUM': df['PART_NUM'],
+    'bacth_processing_rate_per_machine': 1/3 * ALLUM_production_time['production_trays_per_hour'],
     'UPH_ET': df['UPH2']
 }
 
-ALLUM_CAP_PER_DAY_PER_MC = {
-    'TOTAL_SETS': 1240,
-    'SETS_per_Tray': 20,
-    'Tray_per_batch': 10,
-    'Tray_per_MC': 62,
+MC1_CAP_PER_DAY_PER_MC = {
+    'TOTAL_SETS': 2000,
+    'SETS_per_Tray': 200,
+    'Tray_per_batch': 100,
+    'Tray_per_MC': 6200,
     'Cap_per_day_per_mc': 14200
 }
 
 
-print(ALLUM_production_time['production_rate_trays_per_hour'])
-print(ET_production_time['UPH_ET'])
+print(MC1_production_time['production_rate_trays_per_hour'])
+print(MC2_production_time['UPH_MC2'])
 
 
 
 
-class SDET:
-    def __init__(self, env, hpu_alm, spu_et, sets_qty):
+class Line:
+    def __init__(self, env, hpu_mc1, spu_mc2, mat_qty):
         self.env = env
-        self.hpu_alm = hpu_alm
-        self.spu_et = spu_et
-        self.sets_qty = sets_qty
-        self.total_production_allum = 0
-        self.total_production_et = 0
+        self.hpu_mc1 = hpu_mc1
+        self.spu_mc2 = spu_mc2
+        self.mat_qty = mat_qty
+        self.total_production_mc1 = 0
+        self.total_production_mc2 = 0
         self.run_result = []
     
-    def allum_process(self, sets_qty, batch_size, alm_rate):
-        process_time = ((sets_qty * batch_size) * (3600 / alm_rate))
+    def mc1_process(self, mat_qty, batch_size, mc1_rate):
+        process_time = ((mat_qty * batch_size) * (3600 / mc1_rate))
         yield self.env.timeout(process_time)
-        self.total_production_allum += batch_size
-        print(f'Allum process time of batch size: {batch_size} trays at {self.env.now:.2f} seconds')
-        return process_time, self.total_production_allum
+        self.total_production_mc1 += batch_size
+        print(f'mc1 process time of batch size: {batch_size} trays at {self.env.now:.2f} seconds')
+        return process_time, self.total_production_mc1
     
-    def et_process(self, sets_qty, batch_size, et_rate):
+    def mc2_process(self, mat_qty, batch_size, mc2_rate):
         yield self.env.timeout(10)
         if 6 <= batch_size <= 7:
-            process_time = ((sets_qty * 2) * (3600 / et_rate)) + 22 # 6 trays + Purge Time
+            process_time = ((mat_qty * 2) * (3600 / mc2_rate)) + 22 # 6 trays + Purge Time
         else:
-            process_time = (((sets_qty * 2) * 2) * (3600 / et_rate)) + 22 # 10 trays + Purge Time
+            process_time = (((mat_qty * 2) * 2) * (3600 / mc2_rate)) + 22 # 10 trays + Purge Time
     
         yield self.env.timeout(process_time)
-        self.total_production_et += batch_size
-        print(f'ET process time of batch size: {batch_size} trays at {self.env.now:.2f} seconds')
-        return process_time, self.total_production_et
+        self.total_production_mc2 += batch_size
+        print(f'mc2 process time of batch size: {batch_size} trays at {self.env.now:.2f} seconds')
+        return process_time, self.total_production_mc2
     
-    def sim(self, sets_qty, batch_size, alm_rate, et_rate):
-        print(f'Starting simulation for SETS Qty: {sets_qty}, Batch Size: {batch_size}')
+    def sim(self, mat_qty, batch_size, mc1_rate, mc2_rate):
+        print(f'Starting simulation for Mat Qty: {sets_qty}, Batch Size: {batch_size}')
         # ALLUM Start
-        start_allum = self.env.now
-        yield self.env.process(self.allum_process(sets_qty, batch_size, alm_rate))
-        end_allum = self.env.now
-        allum_time = end_allum - start_allum
+        start_mc1 = self.env.now
+        yield self.env.process(self.mc1_process(mat_qty, batch_size, mc1_rate))
+        end_mc1 = self.env.now
+        mc1_time = end_mc1 - start_mc1
         move_time_start = self.env.now
 
         yield self.env.timeout(22) # move time forward by 22 seconds to allow for ET machines to start processing
         move_time_end = self.env.now
         move_time = move_time_end - move_time_start
-        allum_time += move_time
+        mc1_time += move_time
 
         # ET Start
-        et_start = self.env.now
+        mc2_start = self.env.now
         yield self.env.process(self.et_process(sets_qty, batch_size, et_rate))
-        et_end = self.env.now
-        et_time = et_end - et_start
+        mc2_end = self.env.now
+        mc2_time = mc2_end - mc2_start
 
-        idle_time = max(0, et_time - allum_time) 
+        idle_time = max(0, mc2_time - mc1_time) 
 
 
 
@@ -103,51 +103,51 @@ class SDET:
         print(f'Idle Time : {idle_time:.2f}')
 
         self.run_result.append({
-            'SETS Qty': sets_qty,
+            'Mat Qty': mat_qty,
             'Batch Size': batch_size,
             'Idle Time': idle_time,
-            'Total Production Allum': self.total_production_allum,
-            'Total Production ET': self.total_production_et
+            'Total Production MC1': self.total_production_mc1,
+            'Total Production MC2': self.total_production_mc2
         })
     
 
 
-def run_sim(sets_qty, batch_size, alm_rate, et_rate):
+def run_sim(mat_qty, batch_size, mc1_rate, mc2_rate):
     env = simpy.Environment()
 
-    sdet_line = SDET(env, ALLUM_production_time['production_rate_trays_per_hour'], ET_production_time['UPH_ET'], sets_qty)
-    env.process(sdet_line.sim(sets_qty, batch_size, alm_rate, et_rate))
+    process_line = SDET(env, MC1_production_time['production_rate_trays_per_hour'], MC2_production_time['UPH_ET'], mat_qty)
+    env.process(process_line.sim(mat_qty, batch_size, mc1_rate, mc2_rate))
     env.run(until=3600 * 24 * 7) # Simulate for 7 days
 
-    return sdet_line.run_result
+    return process_line.run_result
 
 
 
-sets_qty_option = range(18, 21)
+mat_qty_option = range(18, 21)
 batch_size_option = [6, 10]
 
 all_results = []
 
-alm_rates = df['UPH'].tolist()
-et_rates = df['UPH2'].tolist()
+mc1_rates = df['UPH'].tolist()
+mc2_rates = df['UPH2'].tolist()
 
-for sets_qty in sets_qty_option:
+for mat_qty in mat_qty_option:
     for batch_size in batch_size_option:
-        for alm_rate, et_rate in zip(alm_rates, et_rates):
-            results = run_sim(sets_qty, batch_size, alm_rate, et_rate)
+        for mc1_rate, mc2_rate in zip(mc1_rates, mc2_rates):
+            results = run_sim(mat_qty, batch_size, mc1_rate, mc2_rate)
             all_results.append(results)
 
-df_result = pd.DataFrame(columns=['SETS Qty', 'Batch Size', 'Idle Time', 'Total Production Allum', 'Total Production ET'])
+df_result = pd.DataFrame(columns=['Mat Qty', 'Batch Size', 'Idle Time', 'Total Production MC1', 'Total Production MC2'])
 
 for result in all_results:
     for res in result:
-       print(f'SETS Qty: {res["SETS Qty"]}, Batch Size: {res["Batch Size"]}, Idle Time: {res["Idle Time"]}, Total Production Allum: {res["Total Production Allum"]}, Total Production ET: {res["Total Production ET"]}')
+       print(f'Mat Qty: {res["Mat Qty"]}, Batch Size: {res["Batch Size"]}, Idle Time: {res["Idle Time"]}, Total Production MC1: {res["Total Production MC1"]}, Total Production MC2: {res["Total Production MC2"]}')
        df_result = pd.concat([df_result, pd.DataFrame([res])], ignore_index=True)
-       if res['SETS Qty'] == 20 and res['Batch Size'] == 10:
+       if res['Mat Qty'] == 20 and res['Batch Size'] == 10:
            print(f'Idle Time at Current Standard {res["Idle Time"]}')
 
 
-X = df_result[['SETS Qty', 'Batch Size']] # Features
+X = df_result[['Mat Qty', 'Batch Size']] # Features
 y = df_result['Idle Time'] # Target
 
 
@@ -177,7 +177,7 @@ def VIF(X):
     vif_data['feature'] = X.columns
     vif_data['VIF'] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
     return vif_data
-x_train_df = pd.DataFrame(X_train, columns=['SETS Qty', 'Batch Size'])
+x_train_df = pd.DataFrame(X_train, columns=['Mat Qty', 'Batch Size'])
 vif_data = VIF(x_train_df)
 print(vif_data)
 
@@ -245,22 +245,22 @@ class PlotLearning(keras.callbacks.Callback):
         plt.show()
 
 
-def idle_time_cal(sets_qty, batch_size, alm_rate, et_rate):
+def idle_time_cal(mat_qty, batch_size, mc1_rate, mc2_rate):
     if 6 <= batch_size <= 7:
-        idle_time = abs((batch_size * sets_qty * (3600 / alm_rate)) - (((sets_qty * 2) * (3600 / et_rate)))) + 22
+        idle_time = abs((batch_size * mat_qty * (3600 / mc1_rate)) - (((mat_qty * 2) * (3600 / mc2_rate)))) + 22
     else:
-        idle_time = abs((batch_size * sets_qty * (3600 / alm_rate)) - (((sets_qty * 2) * 2) * (3600 / et_rate))) + 22
+        idle_time = abs((batch_size * mat_qty * (3600 / mc1_rate)) - (((mat_qty * 2) * 2) * (3600 / mc2_rate))) + 22
  
     return idle_time
 
-def objective_function(x, alm_rates, et_rates):
-    sets_qty, batch_size = x
+def objective_function(x, mc1_rates, mc2_rates):
+    mat_qty, batch_size = x
     if x[0] <= 16 or x[0] > 22:
         return float('inf')
     
     total_idle_time = 0
-    for alm_rate, et_rate in zip(alm_rates, et_rates):
-        total_idle_time += idle_time_cal(sets_qty, batch_size, alm_rate, et_rate)
+    for mc1_rate, mc2_rate in zip(mc1_rates, mc2_rates):
+        total_idle_time += idle_time_cal(mat_qty, batch_size, mc1_rate, mc2_rate)
     
     return total_idle_time
 
@@ -270,18 +270,18 @@ def rastrigin(x):
     return A * n + sum([(xi ** 2 - A * np.cos(2 * np.pi * xi)) for xi in x])
 
 
-def PSO(alm_rates, et_rates):
+def PSO(mc1_rates, mc2_rates):
     lb = [19, 6]
     ub = [21, 10]
 
-    xopt, fopt = pso(objective_function, lb, ub, args=(alm_rates, et_rates), swarmsize=1000, maxiter=500, debug=True
+    xopt, fopt = pso(objective_function, lb, ub, args=(mc1_rates, mc2_rates), swarmsize=1000, maxiter=500, debug=True
                     ,omega=0.7, phip=1.8, phig=1.8)
     return xopt, fopt
 
 def train_test_eva(X, y):
     X_train, X_test, y_train, y_test = prepare_data(X, y)
     input_dim = X_train.shape[1]
-    hidden_layers, _ = PSO(alm_rates, et_rates)
+    hidden_layers, _ = PSO(mc2_rates, mc2_rates)
 
     hidden_layers = [int(unit) for unit in hidden_layers]
     print(f'Check {hidden_layers}') 
@@ -303,31 +303,31 @@ def train_test_eva(X, y):
 
     loss = model.evaluate(X_test, y_test)
     print(f'Loss: {loss}')
-    optimal_sets_qty = hidden_layers[0]
+    optimal_mat_qty = hidden_layers[0]
     optimal_batch_size = hidden_layers[1]
-    optimal_tray = 52 + optimal_batch_size
+    optimal_box = 52 + optimal_batch_size
 
-    print(f'Optimal SETS Qty: {optimal_sets_qty}, Optimal Batch Size: {optimal_batch_size}')
-    print(f'Optimal Tray: {optimal_tray} from 62 Tray')
-    print(f'Current Idle Time: {abs((10 * 20 * (3600 / alm_rate)) - (80 * (3600 / et_rate))) + 22}')
+    print(f'Optimal Mat Qty: {optimal_sets_qty}, Optimal Batch Size: {optimal_batch_size}')
+    print(f'Optimal Box: {optimal_box} from ?? Box')
+    print(f'Current Idle Time: {abs((100 * 200 * (3600 / mc1_rate)) - (800 * (3600 / mc2_rate))) + 1}')
     if optimal_batch_size == 6:
-        print(f'Optimal Idle Time: {abs((optimal_batch_size * optimal_sets_qty * (3600 / alm_rate)) - ((optimal_sets_qty * 2) * (3600 / et_rate))) + 22}')
+        print(f'Optimal Idle Time: {abs((optimal_batch_size * optimal_mat_qty * (3600 / mc1_rate)) - ((optimal_mat_qty * 200) * (3600 / mc2_rate))) + 1}')
     else:
-        print(f'Optimal Idle Time: {abs((optimal_batch_size * optimal_sets_qty * (3600 / alm_rate)) - ((optimal_sets_qty * 4) * (3600 / et_rate))) + 22}')
-    print(f'ALLUM Production Rate: {alm_rate} UPH, ET Production Rate: {et_rate} UPH')
-    print(f'Delta Idle Time: {abs(((10 * 20 * (3600 / alm_rate)) - ((80 * (3600 / et_rate)))) + 22) - (abs((optimal_batch_size * optimal_sets_qty * (3600 / alm_rate)) - (((optimal_sets_qty * 2) * (3600 / et_rate)))) + 22)}')
+        print(f'Optimal Idle Time: {abs((optimal_batch_size * optimal_mat_qty * (3600 / mc1_rate)) - ((optimal_mat_qty * 4000) * (3600 / mc2_rate))) + 22}')
+    print(f'MC1 Production Rate: {mc1_rate} UPH, MC2 Production Rate: {mc2_rate} UPH')
+    print(f'Delta Idle Time: {abs(((100 * 200 * (3600 / mc1_rate)) - ((800 * (3600 / mc2_rate)))) + 1) - (abs((optimal_batch_size * optimal_mat_qty * (3600 / mc1_rate)) - (((optimal_mat_qty * 2000) * (3600 / mc2_rate)))) + 1)}')
     
     converter = CurrencyConverter()
-    current_cost_usd = 28
-    current_cost_all = 1240 * 1.4
-    optimal_cost_usd = optimal_tray * optimal_sets_qty * 1.4
+    current_cost_usd = 2800
+    current_cost_all = 20000 * 6
+    optimal_cost_usd = optimal_tray * optimal_sets_qty * 6
     cost_delta_usd = current_cost_all - optimal_cost_usd
     current_cost_thb = converter.convert(current_cost_all, 'USD', 'THB')
     optimal_cost_thb = converter.convert(optimal_cost_usd, 'USD', 'THB')
     cost_delta_thb = current_cost_thb - optimal_cost_thb
 
-    print(f'Current Cost per SETs/ALLUM (1.4 USD/SETs): {current_cost_usd} USD or {current_cost_thb:.2f} Bath : All SETs use per ALLUM 62 Tray or 1,240 SETs cost = {1240 * 1.4} USD or {converter.convert(1240 * 1.4, "USD", "THB")} Bath') 
-    print(f'Optimal Cost per SETs/ALLUM (1.4 USD/SETs): {(optimal_cost_usd):.2f} USD or {optimal_cost_thb:.2f} Bath : Optimal All SDET Lines SETs cost = {((optimal_tray * optimal_sets_qty) * 1.4):.2f} USD or {converter.convert((optimal_tray * optimal_sets_qty) * 1.4, "USD", "THB")} Bath')
-    print(f'Delta Cost per SETs/ALLUM USD: {cost_delta_usd:.2f} USD and THB: {cost_delta_thb:.2f} THB')
+    print(f'Current Cost per Mat/MC1 (6 USD/Mat): {current_cost_usd} USD or {current_cost_thb:.2f} Bath : All Mat use per MC1 ?? Box or ??? Mat cost = {20000 * 6} USD or {converter.convert(20000 * 6, "USD", "THB")} Bath') 
+    print(f'Optimal Cost per Mat/MC1 (6 USD/Mat): {(optimal_cost_usd):.2f} USD or {optimal_cost_thb:.2f} Bath : Optimal All Process Lines Mat cost = {((optimal_box * optimal_mat_qty) * 6):.2f} USD or {converter.convert((optimal_box * optimal_mat_qty) * 1.4, "USD", "THB")} Bath')
+    print(f'Delta Cost per Mat/MC1 USD: {cost_delta_usd:.2f} USD and THB: {cost_delta_thb:.2f} THB')
 
 train_test_eva(X, y)
