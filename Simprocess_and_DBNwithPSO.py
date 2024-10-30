@@ -26,7 +26,7 @@ MC1_production_time = {
 
 MC2_production_time = {
     'TSTR_PART_NUM': df['PART_NUM'],
-    'bacth_processing_rate_per_machine': 1/3 * ALLUM_production_time['production_trays_per_hour'],
+    'bacth_processing_rate_per_machine': 1/3 * MC1_production_time['production_trays_per_hour'],
     'UPH_ET': df['UPH2']
 }
 
@@ -75,7 +75,7 @@ class Line:
         return process_time, self.total_production_mc2
     
     def sim(self, mat_qty, batch_size, mc1_rate, mc2_rate):
-        print(f'Starting simulation for Mat Qty: {sets_qty}, Batch Size: {batch_size}')
+        print(f'Starting simulation for Mat Qty: {mat_qty}, Batch Size: {batch_size}')
         # ALLUM Start
         start_mc1 = self.env.now
         yield self.env.process(self.mc1_process(mat_qty, batch_size, mc1_rate))
@@ -90,7 +90,7 @@ class Line:
 
         # ET Start
         mc2_start = self.env.now
-        yield self.env.process(self.et_process(sets_qty, batch_size, et_rate))
+        yield self.env.process(self.et_process(mat_qty, batch_size, mc2_rate))
         mc2_end = self.env.now
         mc2_time = mc2_end - mc2_start
 
@@ -115,7 +115,7 @@ class Line:
 def run_sim(mat_qty, batch_size, mc1_rate, mc2_rate):
     env = simpy.Environment()
 
-    process_line = SDET(env, MC1_production_time['production_rate_trays_per_hour'], MC2_production_time['UPH_ET'], mat_qty)
+    process_line = Line(env, MC1_production_time['production_rate_trays_per_hour'], MC2_production_time['UPH_ET'], mat_qty)
     env.process(process_line.sim(mat_qty, batch_size, mc1_rate, mc2_rate))
     env.run(until=3600 * 24 * 7) # Simulate for 7 days
 
